@@ -1,0 +1,10 @@
+# Terraform files
+infra_tf/.terraform/*
+infra_tf/.terraform/
+infra_tf/terraform.tfstate
+infra_tf/terraform.tfstate.backup
+infra_tf/.terraform.lock.hcl
+infra_tf/jenkins_key.pem
+
+# Ansible inventory
+ansible/inventory/jenkins_server.ini
