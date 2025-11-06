@@ -1,14 +1,3 @@
-
-# Latest Ubunutu LTS
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
-    filter {
-        name   = "name"
-        values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
-    }
-}
-
 # RSA key of size 4096 bits
 resource "tls_private_key" "jenkins_key" {
   algorithm = "RSA"
@@ -146,7 +135,7 @@ resource "aws_security_group" "jenkins_http_sg" {
 
 // Create a Jenkins EC2 instance
 resource "aws_instance" "jenkins_server" {
-    ami                    = data.aws_ami.ubuntu.id
+    ami                    = var.ubuntu_ami
     instance_type          = "t2.micro"
     subnet_id              = aws_subnet.jenkins_public_subnet.id
     key_name               = aws_key_pair.jenkins_key_pair.key_name
