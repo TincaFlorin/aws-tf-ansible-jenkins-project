@@ -72,9 +72,24 @@
         state: present
     
     - name: Run alpine/socat container to forward traffic from Jenkins to Docker 
-      ansible.builtin.shell: |
-        docker run --name socat -d --restart=always -p 127.0.0.1:2376:2375 --network jenkins -v /var/run/docker.sock:/var/run/docker.sock alpine/socat tcp-listen:2375,fork,reuseaddr unix-connect:/var/run/docker.sock
+      community.docker.docker_container:
+        name: socat
+        image: alpine/socat
+        state: started
+        restart_policy: always
+        detach: yes
+        networks:
+          - name: jenkins
+        published_ports:
+          - "2376:2375"
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+        command: tcp-listen:2375,fork,reuseaddr unix-connect:/var/run/docker.sock
       ignore_errors: yes
+      # #
+      # ansible.builtin.shell: |
+      #   docker run --name socat -d --restart=always -p 127.0.0.1:2376:2375 --network jenkins -v /var/run/docker.sock:/var/run/docker.sock alpine/socat tcp-listen:2375,fork,reuseaddr unix-connect:/var/run/docker.sock
+      # ignore_errors: yes
 
     - name: Ensure /var/jenkins directory exists
       file:
@@ -84,7 +99,7 @@
     
     - name: Move Jenkins Dockerfile to Server
       ansible.builtin.copy:
-        src: /ftp/materiale/cicd/docker/Dockerfile
+        src: /ftp/projects/cicd/docker/Dockerfile
         dest: /var/jenkins/Dockerfile
     
     - name: Build Jenkins Docker Image
@@ -92,15 +107,34 @@
         docker build -t myjenkins-blueocean:2.528.1-1 /var/jenkins
     
     - name: Run Jenkins BlueOcean container 
-      ansible.builtin.shell: |
-        docker run --name jenkins-blueocean --restart=on-failure --detach \
-        --network jenkins --env DOCKER_HOST=tcp://docker:2376 \
-        --env DOCKER_CERT_PATH=/certs/client --env DOCKER_TLS_VERIFY=1 \
-        --publish 8080:8080 --publish 50000:50000 \
-        --volume jenkins-data:/var/jenkins_home \
-        --volume jenkins-docker-certs:/certs/client:ro \
-        myjenkins-blueocean:2.528.1-1
+      community.docker.docker_container:
+        name: jenkins-blueocean
+        image: myjenkins-blueocean:2.528.1-1
+        state: started
+        restart_policy: on-failure
+        detach: yes
+        networks:
+          - name: jenkins
+        env:
+          DOCKER_HOST: tcp://docker:2376
+          DOCKER_CERT_PATH: /certs/client
+          DOCKER_TLS_VERIFY: '1'
+        published_ports:
+          - "8080:8080"
+          - "50000:50000"
+        volumes:
+          - jenkins-data:/var/jenkins_home
+          - jenkins-docker-certs:/certs/client:ro
       ignore_errors: yes
+      # ansible.builtin.shell: |
+      #   docker run --name jenkins-blueocean --restart=on-failure --detach \
+      #   --network jenkins --env DOCKER_HOST=tcp://docker:2376 \
+      #   --env DOCKER_CERT_PATH=/certs/client --env DOCKER_TLS_VERIFY=1 \
+      #   --publish 8080:8080 --publish 50000:50000 \
+      #   --volume jenkins-data:/var/jenkins_home \
+      #   --volume jenkins-docker-certs:/certs/client:ro \
+      #   myjenkins-blueocean:2.528.1-1
+      # ignore_errors: yes
 
     - name: Get socat container IP address
       ansible.builtin.shell: |
@@ -110,7 +144,14 @@
     - name: Print socat container IP address
       ansible.builtin.debug:
         msg: "Socat container IP address is {{ socat_ip.stdout }}"
-        
+    
+    - name: Wait for the Jenkins container to be up
+      ansible.builtin.wait_for:
+        host: localhost
+        port: 8080
+        timeout: 300
+        state: started
+
     - name: Display Jenkins initial admin password
       ansible.builtin.shell: |
         docker exec jenkins-blueocean cat /var/jenkins_home/secrets/initialAdminPassword
